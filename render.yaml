@@ -38,3 +38,5 @@ services:
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://control-horario-backend-kwfa.onrender.com/api
+      - key: HOSTNAME
+        value: 0.0.0.0
