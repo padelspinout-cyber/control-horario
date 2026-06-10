@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ClockEventType {
+  CLOCK_IN
+  PAUSE_START
+  PAUSE_END
+  CLOCK_OUT
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum LeaveType {
+  VACATION
+  SICK_LEAVE
+  OTHER
+}
+
+// Cuenta de la empresa (multi-tenant ligero: cada empresa es un "Company")
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  cif       String?
+  createdAt DateTime @default(now())
+
+  users     User[]
+  employees Employee[]
+
+  @@map("companies")
+}
+
+// Usuario con acceso al sistema (login). Un Empleado puede o no tener User asociado.
+model User {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id])
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(EMPLOYEE)
+  refreshTokenHash String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee     Employee?
+
+  @@map("users")
+  @@index([companyId])
+}
+
+// Datos del empleado (independiente de si tiene acceso al sistema)
+model Employee {
+  id          String         @id @default(uuid())
+  companyId   String
+  company     Company        @relation(fields: [companyId], references: [id])
+  userId      String?        @unique
+  user        User?          @relation(fields: [userId], references: [id])
+
+  firstName   String
+  lastName    String
+  email       String
+  phone       String?
+  position    String
+  hireDate    DateTime
+  status      EmployeeStatus @default(ACTIVE)
+
+  vacationDaysPerYear Int @default(22)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clockEvents      ClockEvent[]
+  leaveRequests    LeaveRequest[]
+  auditLogsTarget  AuditLog[]     @relation("AuditTargetEmployee")
+
+  @@map("employees")
+  @@index([companyId])
+}
+
+// Registro horario: cada fichaje es un evento inmutable. La jornada se calcula
+// agrupando eventos CLOCK_IN -> PAUSE_START/PAUSE_END -> CLOCK_OUT.
+// Cumple con el Real Decreto-ley 8/2019 (registro diario de jornada):
+// se almacena fecha, hora exacta, empleado, y metadatos del dispositivo/origen.
+model ClockEvent {
+  id         String         @id @default(uuid())
+  employeeId String
+  employee   Employee       @relation(fields: [employeeId], references: [id])
+
+  type       ClockEventType
+  timestamp  DateTime       @default(now())
+
+  ipAddress  String?
+  userAgent  String?
+  deviceInfo String?
+  latitude   Float?
+  longitude  Float?
+
+  // Indica si el registro ha sido corregido posteriormente (ver AuditLog)
+  isCorrected Boolean @default(false)
+
+  createdAt  DateTime @default(now())
+
+  @@map("clock_events")
+  @@index([employeeId, timestamp])
+}
+
+// Solicitudes de vacaciones / ausencias
+model LeaveRequest {
+  id         String      @id @default(uuid())
+  employeeId String
+  employee   Employee    @relation(fields: [employeeId], references: [id])
+
+  type       LeaveType   @default(VACATION)
+  startDate  DateTime
+  endDate    DateTime
+  status     LeaveStatus @default(PENDING)
+  reason     String?
+
+  reviewedById String?
+  reviewedAt   DateTime?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("leave_requests")
+  @@index([employeeId])
+}
+
+// Auditoría obligatoria: ningún registro horario se borra. Toda corrección
+// queda trazada con autor, motivo, valor anterior y valor nuevo (RD-ley 8/2019
+// + criterios de Inspección de Trabajo sobre integridad del registro).
+model AuditLog {
+  id            String   @id @default(uuid())
+
+  // Empleado al que afecta el registro modificado
+  targetEmployeeId String
+  targetEmployee   Employee @relation("AuditTargetEmployee", fields: [targetEmployeeId], references: [id])
+
+  // Quién hizo el cambio (id de User administrador)
+  performedByUserId String
+
+  entityType    String   // p.ej. "ClockEvent", "Employee", "LeaveRequest"
+  entityId      String
+  action        String   // p.ej. "CREATE_CORRECTION", "UPDATE", "STATUS_CHANGE"
+  reason        String
+
+  previousValue Json?
+  newValue      Json?
+
+  createdAt     DateTime @default(now())
+
+  @@map("audit_logs")
+  @@index([targetEmployeeId])
+  @@index([entityType, entityId])
+}
+
+// Configuración de la empresa (jornada, retención de datos, etc.)
+model CompanySettings {
+  id                 String  @id @default(uuid())
+  companyId          String  @unique
+  weeklyHoursTarget  Float   @default(40)
+  retentionYears     Int     @default(4) // RD-ley 8/2019: conservación 4 años
+  timezone           String  @default("Europe/Madrid")
+
+  @@map("company_settings")
+}
