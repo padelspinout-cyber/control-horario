@@ -17,4 +17,4 @@ RUN npm install --omit=dev && npx prisma generate
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 3001
-CMD ["node", "dist/main"]
+CMD npx prisma migrate deploy && node prisma/seed.js && node dist/main
