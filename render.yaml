@@ -27,7 +27,7 @@ services:
       - key: PORT
         value: 3001
       - key: CORS_ORIGIN
-        value: https://control-horario-frontend.onrender.com
+        value: https://control-horario-frontend-p3ix.onrender.com
 
   - type: web
     name: control-horario-frontend
@@ -37,4 +37,4 @@ services:
     dockerContext: ./frontend
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: https://control-horario-backend.onrender.com/api
+        value: https://control-horario-backend-kwfa.onrender.com/api
