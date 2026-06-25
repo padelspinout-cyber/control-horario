@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://control-horario-backend-kwfa.onrender.com/api';
 
 function getTokens() {
   if (typeof window === 'undefined') return { accessToken: null, refreshToken: null };
